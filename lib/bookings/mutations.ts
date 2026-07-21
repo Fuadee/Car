@@ -1,10 +1,16 @@
 import { supabaseAdminRequest } from "../supabase/admin";
 import {
+  bookingCodeExists,
   checkBookingConflict,
   getActiveVehicle,
   getBookingById,
   toPublicBooking,
 } from "./queries";
+import {
+  createBookingCode,
+  hashBookingCode,
+  isBookingCode,
+} from "./booking-code";
 import type {
   BookingInput,
   BookingRow,
@@ -14,28 +20,11 @@ import type {
   UpdateBookingInput,
 } from "./types";
 
-async function codeHash(code: string) {
-  const secret = process.env.ADMIN_SESSION_SECRET;
-  if (!secret) throw new Error("MANAGEMENT_SECRET_NOT_CONFIGURED");
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const bytes = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(code),
-  );
-  return Array.from(new Uint8Array(bytes), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
 const isOverlapError = (detail: string) =>
   detail.includes("confirmed_booking_no_overlap") || detail.includes("23P01");
+const isBookingCodeConflict = (detail: string) =>
+  detail.includes("vehicle_bookings_management_code_hash_key") ||
+  detail.includes("management_code_hash");
 
 export async function createBooking(
   input: BookingInput,
@@ -44,8 +33,7 @@ export async function createBooking(
 ): Promise<
   MutationResult<{
     booking: PublicBooking;
-    reference: string;
-    managementCode: string;
+    bookingCode: string;
   }>
 > {
   const vehicle = await getActiveVehicle();
@@ -59,30 +47,32 @@ export async function createBooking(
       message: "ช่วงเวลานี้มีผู้จองรถแล้ว กรุณาเลือกช่วงเวลาใหม่",
       conflict,
     };
-  const reference = `CAR-${start.toISOString().slice(0, 10).replaceAll("-", "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-  const managementCode = String(
-    (crypto.getRandomValues(new Uint32Array(1))[0] % 900000) + 100000,
-  );
-  const record = {
-    vehicle_id: vehicle.id,
-    booking_reference: reference,
-    management_code_hash: await codeHash(managementCode),
-    booker_name: input.name,
-    phone: input.phone || null,
-    purpose: input.purpose,
-    destination: input.destination,
-    note: input.note || null,
-    start_time: start.toISOString(),
-    end_time: end.toISOString(),
-    status: "confirmed",
-  };
-  const response = await supabaseAdminRequest("vehicle_bookings", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify(record),
-  });
-  if (!response.ok) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const bookingCode = createBookingCode();
+    const managementCodeHash = await hashBookingCode(bookingCode);
+    if (await bookingCodeExists(managementCodeHash)) continue;
+    const response = await supabaseAdminRequest("vehicle_bookings", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        vehicle_id: vehicle.id,
+        booking_reference: `CAR-${start.toISOString().slice(0, 10).replaceAll("-", "")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
+        management_code_hash: managementCodeHash,
+        booker_name: input.name,
+        purpose: input.purpose,
+        destination: input.destination,
+        note: input.note || null,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        status: "confirmed",
+      }),
+    });
+    if (response.ok) {
+      const row = ((await response.json()) as BookingRow[])[0];
+      return { ok: true, data: { booking: toPublicBooking(row), bookingCode } };
+    }
     const detail = await response.text();
+    if (isBookingCodeConflict(detail)) continue;
     return {
       ok: false,
       status: 409,
@@ -91,18 +81,18 @@ export async function createBooking(
         : "ไม่สามารถบันทึกการจองได้",
     };
   }
-  const row = ((await response.json()) as BookingRow[])[0];
   return {
-    ok: true,
-    data: { booking: toPublicBooking(row), reference, managementCode },
+    ok: false,
+    status: 503,
+    message: "ไม่สามารถสร้างรหัสการจองได้ กรุณาลองใหม่อีกครั้ง",
   };
 }
 
 async function authorizedBooking(id: string, credentials: ManageCredentials) {
+  if (!isBookingCode(credentials.bookingCode)) return null;
   const row = await getBookingById(id);
   return row &&
-    row.booking_reference === credentials.reference &&
-    row.management_code_hash === (await codeHash(credentials.managementCode))
+    row.management_code_hash === (await hashBookingCode(credentials.bookingCode))
     ? row
     : null;
 }
@@ -118,7 +108,7 @@ export async function updateBooking(
     return {
       ok: false,
       status: 403,
-      message: "เลขอ้างอิงหรือรหัสจัดการไม่ถูกต้อง",
+      message: "ไม่พบการจองจากรหัสนี้ กรุณาตรวจสอบแล้วลองอีกครั้ง",
     };
   if (current.updated_at !== input.updatedAt)
     return {
@@ -148,7 +138,6 @@ export async function updateBooking(
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
       booker_name: input.name,
-      phone: input.phone || null,
       purpose: input.purpose,
       destination: input.destination,
       note: input.note || null,
@@ -186,7 +175,7 @@ export async function cancelBooking(
     return {
       ok: false,
       status: 403,
-      message: "เลขอ้างอิงหรือรหัสจัดการไม่ถูกต้อง",
+      message: "ไม่พบการจองจากรหัสนี้ กรุณาตรวจสอบแล้วลองอีกครั้ง",
     };
   const response = await supabaseAdminRequest(`vehicle_bookings?id=eq.${id}`, {
     method: "PATCH",

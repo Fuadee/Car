@@ -9,6 +9,7 @@ export type VehicleBooking = {
   name: string;
   purpose: string;
   location: string;
+  note?: string | null;
   status: "confirmed" | "active" | "completed" | "cancelled";
   updatedAt: string;
 };
@@ -231,24 +232,27 @@ export function CalendarMonth({
             : coversWholeDay(entries, key)
               ? "full"
               : "partial";
+          const dayStatus = hasActive ? "inUse" : status;
+          const statusLabel =
+            dayStatus === "inUse"
+              ? "ใช้งานอยู่"
+              : dayStatus === "available"
+                ? "ว่างทั้งวัน"
+                : dayStatus === "partial"
+                  ? "ยังมีเวลาว่าง"
+                  : "เต็มทั้งวัน";
           return (
             <button
               type="button"
               role="gridcell"
-              aria-label={`${key} ${!entries.length ? "ว่างทั้งวัน" : `${entries.length} รายการ`}`}
-              className={`calendarDay ${inMonth ? "" : "outside"} ${isToday ? "isToday" : ""} ${isSelected ? "isSelected" : ""}`}
+              aria-label={`${key} ${statusLabel}${entries.length ? `, ${entries.length} รายการ` : ""}`}
+              className={`calendarDay status-${dayStatus} ${inMonth ? "" : "outside"} ${isToday ? "isToday" : ""} ${isSelected ? "isSelected" : ""}`}
               key={key}
               onClick={() => chooseDay(key)}
             >
               <span className="dayNumber">{day.getDate()}</span>
-              <span className={`dayBadge ${hasActive ? "inUse" : status}`}>
-                {hasActive
-                  ? "ใช้งานอยู่"
-                  : status === "available"
-                    ? "ว่างทั้งวัน"
-                    : status === "partial"
-                      ? "ยังมีเวลาว่าง"
-                      : "เต็มแล้ว"}
+              <span className={`dayBadge ${dayStatus}`}>
+                {statusLabel}
               </span>
               <span className="dayEvents">
                 {entries.slice(0, 2).map((entry) => {

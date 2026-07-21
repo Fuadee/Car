@@ -2,7 +2,7 @@ import { supabaseAdminRequest } from "../supabase/admin";
 import type { BookingRow, PublicBooking } from "./types";
 
 const publicColumns =
-  "id,vehicle_id,booker_name,purpose,destination,start_time,end_time,status,updated_at";
+  "id,vehicle_id,booker_name,purpose,destination,note,start_time,end_time,status,updated_at";
 export const toPublicBooking = (row: BookingRow): PublicBooking => ({
   id: row.id,
   startAt: row.start_time,
@@ -10,6 +10,7 @@ export const toPublicBooking = (row: BookingRow): PublicBooking => ({
   name: row.booker_name,
   purpose: row.purpose,
   location: row.destination,
+  note: row.note,
   status: row.status,
   updatedAt: row.updated_at,
 });
@@ -40,6 +41,21 @@ export async function getBookingById(id: string) {
   const response = await supabaseAdminRequest(`vehicle_bookings?${params}`);
   if (!response.ok) throw new Error("BOOKING_READ_FAILED");
   return ((await response.json()) as BookingRow[])[0] ?? null;
+}
+
+export async function getBookingByCodeHash(codeHash: string) {
+  const params = new URLSearchParams({
+    select: "*",
+    management_code_hash: `eq.${codeHash}`,
+    limit: "1",
+  });
+  const response = await supabaseAdminRequest(`vehicle_bookings?${params}`);
+  if (!response.ok) throw new Error("BOOKING_CODE_LOOKUP_FAILED");
+  return ((await response.json()) as BookingRow[])[0] ?? null;
+}
+
+export async function bookingCodeExists(codeHash: string) {
+  return Boolean(await getBookingByCodeHash(codeHash));
 }
 
 export async function checkBookingConflict(

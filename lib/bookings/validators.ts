@@ -13,7 +13,6 @@ export function validateBookingInput(
   const input = value as Record<string, unknown>;
   const data: BookingInput = {
     name: clean(input.name, 120),
-    phone: clean(input.phone, 30),
     purpose: clean(input.purpose, 240),
     destination: clean(input.destination ?? input.location, 240),
     note: clean(input.note, 1000),

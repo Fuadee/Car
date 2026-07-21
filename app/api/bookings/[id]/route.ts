@@ -12,8 +12,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     const body = (await request.json()) as Record<string, unknown>;
     if (body.action === "cancel") {
       const result = await cancelBooking(id, {
-        reference: String(body.reference ?? ""),
-        managementCode: String(body.managementCode ?? ""),
+        bookingCode: String(body.bookingCode ?? ""),
       });
       return result.ok
         ? NextResponse.json({ ok: true, booking: result.data })
@@ -25,8 +24,7 @@ export async function PATCH(request: NextRequest, context: Context) {
       id,
       {
         ...validated.data,
-        reference: String(body.reference ?? ""),
-        managementCode: String(body.managementCode ?? ""),
+        bookingCode: String(body.bookingCode ?? ""),
         updatedAt: String(body.updatedAt ?? ""),
       },
       validated.start,

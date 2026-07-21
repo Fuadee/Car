@@ -10,6 +10,14 @@
   --green: #16875b;
   --red: #d73d3d;
   --orange: #d97706;
+  --vehicle-available-bg: #ecfdf5;
+  --vehicle-available-border: #bbf7d0;
+  --vehicle-available-text: #15803d;
+  --vehicle-available-accent: #22c55e;
+  --vehicle-in-use-bg: #fef2f2;
+  --vehicle-in-use-border: #fecaca;
+  --vehicle-in-use-text: #dc2626;
+  --vehicle-in-use-accent: #ef4444;
 }
 * {
   box-sizing: border-box;
@@ -45,12 +53,14 @@ button {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: var(--blue);
-  color: white;
+  background: #eef4ff;
+  color: #2563eb;
   display: grid;
   place-items: center;
-  font-size: 22px;
-  font-weight: 700;
+}
+.brandMark svg {
+  width: 22px;
+  height: 22px;
 }
 .brand {
   display: flex;
@@ -70,6 +80,28 @@ button {
   color: #33425a;
   min-height: 44px;
   padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.manageLink svg,
+.manageBookingLink svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  flex: none;
+}
+.manageLabelShort {
+  display: none;
+}
+button:focus-visible {
+  outline: 3px solid #dce8ff;
+  outline-offset: 2px;
 }
 .page {
   width: min(1080px, calc(100% - 32px));
@@ -112,6 +144,18 @@ button {
   position: relative;
   overflow: hidden;
 }
+.vehicleCard.isAvailable {
+  --vehicle-status-bg: var(--vehicle-available-bg);
+  --vehicle-status-border: var(--vehicle-available-border);
+  --vehicle-status-text: var(--vehicle-available-text);
+  --vehicle-status-accent: var(--vehicle-available-accent);
+}
+.vehicleCard.isInUse {
+  --vehicle-status-bg: var(--vehicle-in-use-bg);
+  --vehicle-status-border: var(--vehicle-in-use-border);
+  --vehicle-status-text: var(--vehicle-in-use-text);
+  --vehicle-status-accent: var(--vehicle-in-use-accent);
+}
 .vehicleCard:before {
   content: "";
   position: absolute;
@@ -119,7 +163,7 @@ button {
   top: 0;
   bottom: 0;
   width: 5px;
-  background: var(--red);
+  background: var(--vehicle-status-accent);
 }
 .vehicleTop {
   display: flex;
@@ -157,18 +201,19 @@ button {
 }
 .status {
   margin-left: auto;
-  background: #fff0f0;
-  color: var(--red);
-  font-weight: 700;
+  background: var(--vehicle-status-bg);
+  border: 1px solid var(--vehicle-status-border);
+  color: var(--vehicle-status-text);
+  font-weight: 600;
   border-radius: 99px;
   padding: 9px 13px;
-  font-size: 14px;
+  font-size: 13px;
 }
 .status i,
 .legend i {
   width: 8px;
   height: 8px;
-  background: var(--red);
+  background: var(--vehicle-status-accent);
   display: inline-block;
   border-radius: 50%;
   margin-right: 6px;
@@ -225,10 +270,27 @@ button {
   opacity: 0.65;
 }
 .bookMain {
-  position: absolute;
-  right: 26px;
-  bottom: 24px;
   min-width: 148px;
+}
+.vehicleActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+.manageBookingLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 600;
 }
 .schedule {
   background: white;
@@ -432,10 +494,18 @@ footer {
   max-height: calc(100dvh - 36px);
   border-radius: 18px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+}
+.sheet {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dialog {
   overflow: auto;
 }
 .sheetHead {
   display: flex;
+  flex: none;
   justify-content: space-between;
   align-items: center;
   padding: 22px 24px;
@@ -453,9 +523,13 @@ footer {
   font-size: 24px;
 }
 .formBody {
+  flex: 1;
   padding: 20px 24px;
   display: grid;
   gap: 15px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .formBody label,
 .manage label {
@@ -504,9 +578,75 @@ textarea:focus {
   margin: 0;
   font-size: 13px;
 }
+.timeConflict {
+  background: #fff0f0;
+  color: #a82222;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 11px;
+  font-size: 13px;
+}
+.conflictBanner {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: #fff0f0;
+  border-bottom: 1px solid #fecaca;
+  color: #a82222;
+  padding: 12px 24px;
+}
+.conflictBanner > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.conflictBanner strong {
+  font-size: 14px;
+}
+.conflictBanner span,
+.conflictBanner small {
+  font-size: 13px;
+}
+.conflictBanner small {
+  color: inherit;
+}
+.conflictAction {
+  flex: none;
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  background: white;
+  color: #a82222;
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+input.timeConflictField,
+input.timeConflictField:focus {
+  border-color: #dc2626;
+}
+input.timeConflictField:focus {
+  outline-color: #fee2e2;
+}
+.buttonSpinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 7px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: button-spin 0.75s linear infinite;
+}
+@keyframes button-spin {
+  to { transform: rotate(360deg); }
+}
 .sheetFoot {
-  position: sticky;
-  bottom: 0;
+  flex: none;
   background: white;
   border-top: 1px solid var(--line);
   padding: 15px 24px;
@@ -564,8 +704,28 @@ textarea:focus {
   background: #fff8e8;
   padding: 10px;
 }
+.successActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.successActions .warning {
+  width: 100%;
+  margin: 0;
+}
 .dialog .primary {
   width: 100%;
+}
+.cancelDialogActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.cancelDialogActions .cancel {
+  width: auto;
 }
 .manage {
   text-align: left;
@@ -582,6 +742,11 @@ textarea:focus {
 .manage .cancel {
   width: 100%;
   margin-top: 9px;
+}
+.manage .manageBackButton {
+  display: block;
+  width: auto;
+  margin: 14px auto 0;
 }
 .floating {
   position: fixed;
@@ -603,11 +768,21 @@ textarea:focus {
     padding: 0 16px;
   }
   .brand span,
-  .manageLink span {
+  .manageLabelFull {
     display: none;
+  }
+  .manageLabelShort {
+    display: inline;
   }
   .brand strong {
     font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .brand {
+    min-width: 0;
+    flex: 1;
   }
   .page {
     width: min(100% - 24px, 1080px);
@@ -656,8 +831,14 @@ textarea:focus {
   .bookMain {
     position: static;
     width: 100%;
-    margin-top: 18px;
     min-height: 52px;
+  }
+  .vehicleActions {
+    align-items: stretch;
+    margin-top: 18px;
+  }
+  .manageBookingLink {
+    align-self: center;
   }
   .schedule {
     margin-top: 14px;
@@ -713,7 +894,8 @@ textarea:focus {
     border-radius: 20px 20px 0 0;
   }
   .sheetHead,
-  .formBody {
+  .formBody,
+  .conflictBanner {
     padding-left: 18px;
     padding-right: 18px;
   }
@@ -726,7 +908,7 @@ textarea:focus {
   .dialog {
     border-radius: 20px 20px 0 0;
     width: 100%;
-    padding: 26px 20px;
+    padding: 26px 20px max(26px, calc(20px + env(safe-area-inset-bottom)));
   }
   .formRow {
     gap: 9px;
@@ -930,11 +1112,13 @@ h3,
 }
 .eyebrow,
 .dateLabel,
-.status,
 .formBody label,
 .manage label,
 .tabs button {
   font-weight: 700;
+}
+.status {
+  font-weight: 600;
 }
 button,
 .primary,
@@ -1311,8 +1495,11 @@ button,
 }
 .bookingDetail dd {
   margin: 0;
+  min-width: 0;
+  max-width: 65%;
   text-align: right;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 900px) {
   .crossDaySummary {
@@ -1384,13 +1571,41 @@ button,
     margin: 14px 0 9px;
   }
   .calendarLegend {
-    gap: 9px;
+    gap: 8px 12px;
+    color: #475569;
+    font-weight: 600;
+  }
+  .calendarLegend span {
+    display: inline-flex;
+    align-items: center;
+  }
+  .calendarLegend i {
+    width: 9px;
+    height: 9px;
+    margin-right: 6px;
+  }
+  .calendarLegend .available {
+    background: #16a34a;
+  }
+  .calendarLegend .partial {
+    background: #f59e0b;
+  }
+  .calendarLegend .inUse {
+    background: #dc2626;
+  }
+  .calendarLegend .full {
+    background: #6b7280;
   }
   .calendarToolbar select {
     display: none;
   }
   .monthGrid {
     border-radius: 10px;
+    border-color: #eaeff5;
+  }
+  .weekday,
+  .calendarDay {
+    border-color: #eaeff5;
   }
   .weekday {
     height: 32px;
@@ -1405,18 +1620,55 @@ button,
     padding: 4px;
     display: flex;
     align-items: flex-start;
-    justify-content: center;
+    justify-content: flex-start;
+    background: white;
+  }
+  .calendarDay.status-available:not(.outside) {
+    background: #ecfdf5;
+  }
+  .calendarDay.status-partial:not(.outside) {
+    background: #fff7ed;
+  }
+  .calendarDay.status-inUse:not(.outside) {
+    background: #fef2f2;
+  }
+  .calendarDay.status-full:not(.outside) {
+    background: #f3f4f6;
+  }
+  .calendarDay.isSelected {
+    background: #eff6ff !important;
+    box-shadow: inset 0 0 0 2px var(--blue);
+    z-index: 1;
   }
   .calendarDay .dayNumber {
     width: 25px;
     height: 25px;
     font-size: 12px;
+    color: #0f172a;
+    font-weight: 600;
+  }
+  .calendarDay.outside .dayNumber {
+    color: #94a3b8;
   }
   .dayBadge {
-    right: 50%;
-    transform: translateX(50%);
-    top: auto;
-    bottom: 5px;
+    right: 5px;
+    transform: none;
+    top: 8px;
+    bottom: auto;
+    width: 8px;
+    height: 8px;
+  }
+  .dayBadge.available {
+    background: #16a34a;
+  }
+  .dayBadge.partial {
+    background: #f59e0b;
+  }
+  .dayBadge.inUse {
+    background: #dc2626;
+  }
+  .dayBadge.full {
+    background: #6b7280;
   }
   .dayEvents {
     position: absolute;
@@ -1485,7 +1737,7 @@ button,
 }
 @media (max-width: 380px) {
   .calendarLegend span:nth-child(4) {
-    display: none;
+    display: inline-flex;
   }
   .calendarControls .todayButton {
     padding: 0 10px;

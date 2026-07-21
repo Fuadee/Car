@@ -2,12 +2,14 @@
 
 import {
   FormEvent,
+  MouseEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { Car } from "lucide-react";
 import { CalendarMonth, type VehicleBooking } from "./calendar-month";
 
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -36,7 +38,24 @@ const bangkokParts = (iso: string) => {
   return { date: `${value("year")}-${value("month")}-${value("day")}`, time: `${value("hour")}:${value("minute")}` };
 };
 
-type ManagedBooking = Omit<VehicleBooking, "location"> & { phone: string; destination: string; note: string };
+type ManagedBooking = Omit<VehicleBooking, "location"> & { destination: string; note: string };
+type BookingConflict = {
+  message: string;
+  startAt: string | null;
+  endAt: string | null;
+};
+
+function ManageBookingIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <path d="M8 3v3m8-3v3M4.5 9h15M6 5.5h12a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 18 19.5H6A1.5 1.5 0 0 1 4.5 18V7A1.5 1.5 0 0 1 6 5.5Z" />
+      <path d="m10.5 15 1.5 1.5 3-3" />
+    </svg>
+  );
+}
+
+const conflictFallbackMessage =
+  "ช่วงเวลาที่เลือกมีผู้จองแล้ว กรุณาเลือกวันหรือเวลาใหม่";
 
 export function BookingApp() {
   const today = useMemo(() => new Date(), []);
@@ -47,22 +66,25 @@ export function BookingApp() {
   const requestSequence = useRef(0);
   const [open, setOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
-  const [manageReference, setManageReference] = useState("");
-  const [manageCode, setManageCode] = useState("");
+  const [bookingCode, setBookingCode] = useState("");
   const [manageError, setManageError] = useState("");
   const [managed, setManaged] = useState<ManagedBooking | null>(null);
-  const [editContext, setEditContext] = useState<{ id: string; reference: string; code: string; updatedAt: string } | null>(null);
+  const [editContext, setEditContext] = useState<{ id: string; bookingCode: string; updatedAt: string } | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [success, setSuccess] = useState<{
-    reference: string;
     code: string;
+    booking: VehicleBooking;
   } | null>(null);
+  const [copyStatus, setCopyStatus] = useState("");
   const [detail, setDetail] = useState<VehicleBooking | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [timeConflict, setTimeConflict] = useState<BookingConflict | null>(null);
+  const startTimeRef = useRef<HTMLInputElement | null>(null);
+  const manageCodeInputRef = useRef<HTMLInputElement | null>(null);
+  const manageTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [form, setForm] = useState({
     name: "",
-    phone: "",
     startDate: dateKey(today),
     startTime: "",
     endDate: dateKey(today),
@@ -126,8 +148,33 @@ export function BookingApp() {
     const timer = window.setInterval(refresh, 30_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
+  useEffect(() => {
+    if (!manageOpen || managed) return;
+
+    const frame = window.requestAnimationFrame(() => manageCodeInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [manageOpen, managed]);
+  function openManageBooking(event: MouseEvent<HTMLButtonElement>) {
+    manageTriggerRef.current = event.currentTarget;
+    setManaged(null);
+    setManageError("");
+    setBookingCode("");
+    setManageOpen(true);
+  }
+  function closeManageBooking() {
+    setManageOpen(false);
+    window.requestAnimationFrame(() => manageTriggerRef.current?.focus());
+  }
   const setField = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+  const setScheduleField = (
+    key: "startDate" | "startTime" | "endDate" | "endTime",
+    value: string,
+  ) => {
+    setField(key, value);
+    setError("");
+    setTimeConflict(null);
+  };
   const startBooking = (date = dateKey(today), startTime = "") => {
     setEditContext(null);
     setForm((current) => ({
@@ -138,13 +185,17 @@ export function BookingApp() {
       endTime: "",
     }));
     setError("");
+    setTimeConflict(null);
     setOpen(true);
   };
 
   async function lookupBooking(event: FormEvent) {
-    event.preventDefault(); setManageError(""); setBusy(true);
+    event.preventDefault();
+    if (bookingCode.length !== 6)
+      return setManageError("กรุณากรอกรหัสการจองให้ครบ 6 หลัก");
+    setManageError(""); setBusy(true);
     try {
-      const response = await fetch("/api/bookings/manage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reference: manageReference, managementCode: manageCode }) });
+      const response = await fetch("/api/bookings/manage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingCode }) });
       const result = await response.json() as { message?: string; booking?: ManagedBooking };
       if (!response.ok || !result.booking) return setManageError(result.message ?? "ไม่พบการจอง");
       setManaged(result.booking);
@@ -154,15 +205,15 @@ export function BookingApp() {
   function beginEdit() {
     if (!managed) return;
     const start = bangkokParts(managed.startAt); const end = bangkokParts(managed.endAt);
-    setForm({ name: managed.name, phone: managed.phone, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, purpose: managed.purpose, location: managed.destination, note: managed.note });
-    setEditContext({ id: managed.id, reference: manageReference.trim().toUpperCase(), code: manageCode, updatedAt: managed.updatedAt });
+    setForm({ name: managed.name, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, purpose: managed.purpose, location: managed.destination, note: managed.note });
+    setEditContext({ id: managed.id, bookingCode, updatedAt: managed.updatedAt });
     setManageOpen(false); setError(""); setOpen(true);
   }
 
   async function cancelManagedBooking() {
     if (!managed) return; setBusy(true); setManageError("");
     try {
-      const response = await fetch(`/api/bookings/${managed.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cancel", reference: manageReference, managementCode: manageCode }) });
+      const response = await fetch(`/api/bookings/${managed.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cancel", bookingCode }) });
       const result = await response.json() as { message?: string };
       if (!response.ok) return setManageError(result.message ?? "ยกเลิกการจองไม่สำเร็จ");
       setCancelConfirm(false); setManaged(null); setManageOpen(false); refresh();
@@ -171,6 +222,7 @@ export function BookingApp() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setError("");
     if (
       !form.name.trim() ||
@@ -191,32 +243,41 @@ export function BookingApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name,
-          phone: form.phone,
           purpose: form.purpose,
           destination: form.location,
           note: form.note,
           startAt: new Date(`${startAt}:00+07:00`).toISOString(),
           endAt: new Date(`${endAt}:00+07:00`).toISOString(),
-          ...(editContext ? { reference: editContext.reference, managementCode: editContext.code, updatedAt: editContext.updatedAt } : {}),
+          ...(editContext ? { bookingCode: editContext.bookingCode, updatedAt: editContext.updatedAt } : {}),
         }),
       });
-      const result = (await response.json()) as {
+      let result: {
         message?: string;
         conflict?: VehicleBooking;
-        reference?: string;
-        managementCode?: string;
+        bookingCode?: string;
+        booking?: VehicleBooking;
       };
+      try {
+        result = (await response.json()) as typeof result;
+      } catch {
+        result = {};
+      }
+      if (response.status === 409) {
+        setTimeConflict({
+          message: result.message ?? conflictFallbackMessage,
+          startAt: result.conflict?.startAt ?? null,
+          endAt: result.conflict?.endAt ?? null,
+        });
+        return;
+      }
       if (!response.ok)
-        return setError(
-          result.conflict
-            ? `${result.message} (${displayDate(result.conflict.startAt)} · ${result.conflict.name})`
-            : (result.message ?? "ไม่สามารถบันทึกการจองได้"),
-        );
+        return setError(result.message ?? "ไม่สามารถบันทึกการจองได้");
       if (editContext) { setOpen(false); setEditContext(null); refresh(); return; }
-      if (!result.reference || !result.managementCode)
+      if (!result.bookingCode || !result.booking)
         throw new Error("INVALID_RESPONSE");
       setOpen(false);
-      setSuccess({ reference: result.reference, code: result.managementCode });
+      setCopyStatus("");
+      setSuccess({ code: result.bookingCode, booking: result.booking });
       refresh();
     } catch {
       setError("ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่");
@@ -225,16 +286,36 @@ export function BookingApp() {
     }
   }
 
+  async function copyBookingCode() {
+    if (!success) return;
+    try {
+      await navigator.clipboard.writeText(success.code);
+      setCopyStatus("คัดลอกแล้ว");
+    } catch {
+      setCopyStatus("ไม่สามารถคัดลอกรหัสได้");
+    }
+  }
+
   return (
     <main>
       <header className="topbar">
-        <div className="brandMark">ร</div>
+        <div className="brandMark" aria-hidden="true">
+          <Car size={22} />
+        </div>
         <div className="brand">
           <strong>ระบบจองรถส่วนกลาง</strong>
           <span>ดูปฏิทินและจองรถล่วงหน้า</span>
         </div>
-        <button className="manageLink" onClick={() => setManageOpen(true)}>
-          ⌁ <span>จัดการการจอง</span>
+        <button
+          className="manageLink"
+          onClick={openManageBooking}
+          aria-label="ตรวจสอบ แก้ไข หรือยกเลิกการจอง"
+          aria-expanded={manageOpen}
+          aria-controls="manage-booking-sheet"
+        >
+          <ManageBookingIcon />
+          <span className="manageLabelFull">จัดการการจอง</span>
+          <span className="manageLabelShort">จัดการ</span>
         </button>
       </header>
       <div className="page">
@@ -243,11 +324,13 @@ export function BookingApp() {
             <p className="eyebrow">ภาพรวมวันนี้</p>
             <h1>{todayLabel}</h1>
           </div>
-          <button className="outline" onClick={() => setManageOpen(true)}>
+          <button className="outline" onClick={openManageBooking}>
             ⌁ จัดการการจองของฉัน
           </button>
         </section>
-        <section className="vehicleCard compactVehicle">
+        <section
+          className={`vehicleCard compactVehicle ${activeBooking ? "isInUse" : "isAvailable"}`}
+        >
           <div className="vehicleTop">
             <div className="carIcon">▰</div>
             <div>
@@ -303,9 +386,21 @@ export function BookingApp() {
               </div>
             </div>
           </div>
-          <button className="primary bookMain" onClick={() => startBooking()}>
-            ＋ จองรถ
-          </button>
+          <div className="vehicleActions">
+            <button className="primary bookMain" onClick={() => startBooking()}>
+              ＋ จองรถ
+            </button>
+            <button
+              className="manageBookingLink"
+              onClick={openManageBooking}
+              aria-label="ตรวจสอบ แก้ไข หรือยกเลิกการจอง"
+              aria-expanded={manageOpen}
+              aria-controls="manage-booking-sheet"
+            >
+              <ManageBookingIcon />
+              <span>ตรวจสอบ / แก้ไข / ยกเลิกการจอง</span>
+            </button>
+          </div>
         </section>
 
         <CalendarMonth
@@ -349,6 +444,27 @@ export function BookingApp() {
                 ×
               </button>
             </div>
+            {timeConflict && (
+              <div className="conflictBanner" role="alert" aria-live="assertive">
+                <div>
+                  <strong>ไม่สามารถจองช่วงเวลานี้ได้</strong>
+                  <span>{timeConflict.message}</span>
+                  {timeConflict.startAt && timeConflict.endAt && (
+                    <small>
+                      ช่วงเวลาที่ถูกจอง: {displayTime(timeConflict.startAt)}–
+                      {displayTime(timeConflict.endAt)} น.
+                    </small>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="conflictAction"
+                  onClick={() => startTimeRef.current?.focus()}
+                >
+                  เลือกเวลาใหม่
+                </button>
+              </div>
+            )}
             <div className="formBody">
               <label>
                 ชื่อผู้ใช้งาน <em>*</em>
@@ -358,15 +474,6 @@ export function BookingApp() {
                   placeholder="ชื่อ–นามสกุล"
                 />
               </label>
-              <label>
-                เบอร์โทรศัพท์ <small>(ไม่บังคับ)</small>
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={(event) => setField("phone", event.target.value)}
-                  placeholder="เบอร์ที่ติดต่อได้"
-                />
-              </label>
               <div className="formRow">
                 <label>
                   วันที่เริ่มต้น <em>*</em>
@@ -374,8 +481,10 @@ export function BookingApp() {
                     type="date"
                     value={form.startDate}
                     onChange={(event) =>
-                      setField("startDate", event.target.value)
+                      setScheduleField("startDate", event.target.value)
                     }
+                    className={timeConflict ? "timeConflictField" : undefined}
+                    aria-invalid={Boolean(timeConflict)}
                   />
                 </label>
                 <label>
@@ -384,8 +493,11 @@ export function BookingApp() {
                     type="time"
                     value={form.startTime}
                     onChange={(event) =>
-                      setField("startTime", event.target.value)
+                      setScheduleField("startTime", event.target.value)
                     }
+                    ref={startTimeRef}
+                    className={timeConflict ? "timeConflictField" : undefined}
+                    aria-invalid={Boolean(timeConflict)}
                   />
                 </label>
               </div>
@@ -397,8 +509,10 @@ export function BookingApp() {
                     min={form.startDate}
                     value={form.endDate}
                     onChange={(event) =>
-                      setField("endDate", event.target.value)
+                      setScheduleField("endDate", event.target.value)
                     }
+                    className={timeConflict ? "timeConflictField" : undefined}
+                    aria-invalid={Boolean(timeConflict)}
                   />
                 </label>
                 <label>
@@ -407,11 +521,18 @@ export function BookingApp() {
                     type="time"
                     value={form.endTime}
                     onChange={(event) =>
-                      setField("endTime", event.target.value)
+                      setScheduleField("endTime", event.target.value)
                     }
+                    className={timeConflict ? "timeConflictField" : undefined}
+                    aria-invalid={Boolean(timeConflict)}
                   />
                 </label>
               </div>
+              {timeConflict && (
+                <div className="timeConflict">
+                  <span>โปรดเลือกวันหรือเวลาใหม่</span>
+                </div>
+              )}
               <label>
                 ภารกิจ <em>*</em>
                 <input
@@ -446,8 +567,9 @@ export function BookingApp() {
               >
                 ยกเลิก
               </button>
-              <button className="primary" disabled={busy}>
-                {busy ? "กำลังตรวจสอบเวลา…" : editContext ? "บันทึกการแก้ไข" : "ยืนยันการจอง"}
+              <button className="primary" disabled={busy} aria-busy={busy}>
+                {busy && <span className="buttonSpinner" aria-hidden="true" />}
+                {busy ? "กำลังตรวจสอบ..." : editContext ? "บันทึกการแก้ไข" : "ยืนยันการจอง"}
               </button>
             </div>
           </form>
@@ -466,7 +588,7 @@ export function BookingApp() {
               ×
             </button>
             <p className="eyebrow">รายละเอียดการจอง</p>
-            <h2>{detail.purpose}</h2>
+            <h2>{detail.purpose || "ไม่ระบุ"}</h2>
             <dl>
               <div>
                 <dt>ผู้ใช้งาน</dt>
@@ -486,9 +608,19 @@ export function BookingApp() {
                 </dd>
               </div>
               <div>
+                <dt>ภารกิจ</dt>
+                <dd>{detail.purpose || "ไม่ระบุ"}</dd>
+              </div>
+              <div>
                 <dt>สถานที่</dt>
                 <dd>{detail.location}</dd>
               </div>
+              {detail.note && (
+                <div>
+                  <dt>หมายเหตุ</dt>
+                  <dd>{detail.note}</dd>
+                </div>
+              )}
             </dl>
             <button className="primary" onClick={() => setDetail(null)}>
               ปิดรายละเอียด
@@ -503,19 +635,23 @@ export function BookingApp() {
             <h2>จองรถสำเร็จ</h2>
             <p>ปฏิทินได้รับการอัปเดตแล้ว</p>
             <div className="receipt">
-              <span>เลขอ้างอิง</span>
-              <strong>{success.reference}</strong>
-              <span>รหัสจัดการการจอง</span>
+              <span>รหัสการจอง</span>
               <strong className="code">{success.code}</strong>
+              <span>รถที่จอง</span>
+              <strong>รถยนต์ส่วนกลาง</strong>
+              <span>ผู้จอง</span>
+              <strong>{success.booking.name}</strong>
+              <span>ช่วงเวลา</span>
+              <strong>{displayDate(success.booking.startAt)} {displayTime(success.booking.startAt)} – {displayDate(success.booking.endAt)} {displayTime(success.booking.endAt)}</strong>
             </div>
-            <p className="warning">
-              โปรดบันทึกเลขอ้างอิงและรหัสนี้ไว้
-              <br />
-              รหัสจะแสดงเพียงครั้งเดียว
-            </p>
-            <button className="primary" onClick={() => setSuccess(null)}>
-              กลับหน้าปฏิทิน
-            </button>
+            <p className="warning">ใช้รหัสนี้สำหรับตรวจสอบ แก้ไข หรือยกเลิกการจอง</p>
+            <div className="successActions">
+              <button className="cancel" onClick={copyBookingCode}>คัดลอกรหัส</button>
+              {copyStatus && <p className="warning">{copyStatus}</p>}
+              <button className="primary" onClick={() => { setSuccess(null); setCopyStatus(""); }}>
+                กลับหน้าปฏิทิน
+              </button>
+            </div>
           </section>
         </div>
       )}
@@ -523,36 +659,30 @@ export function BookingApp() {
         <div
           className="overlay"
           onMouseDown={(event) =>
-            event.target === event.currentTarget && setManageOpen(false)
+            event.target === event.currentTarget && closeManageBooking()
           }
         >
-          <form className="dialog manage" onSubmit={lookupBooking}>
-            <button type="button" className="close" onClick={() => setManageOpen(false)}>
+          <form className="dialog manage" id="manage-booking-sheet" role="dialog" aria-modal="true" aria-labelledby="manage-booking-title" onSubmit={lookupBooking}>
+            <button type="button" className="close" aria-label="ปิดหน้าจัดการการจอง" onClick={closeManageBooking}>
               ×
             </button>
             <p className="eyebrow">สำหรับผู้ที่จองแล้ว</p>
-            <h2>จัดการการจอง</h2>
-            <p>
-              กรอกข้อมูลจากหน้าจอยืนยัน เพื่อดู แก้ไข หรือยกเลิกรายการของคุณ
-            </p>
+            <h2 id="manage-booking-title">จัดการการจอง</h2>
+            <p>กรอกรหัสการจอง 6 หลัก เพื่อตรวจสอบ แก้ไข หรือยกเลิกการจอง</p>
             {!managed ? <>
               <label>
-                เลขอ้างอิงการจอง
-                <input value={manageReference} onChange={(event) => setManageReference(event.target.value)} placeholder="เช่น CAR-20260720-AB12" />
-              </label>
-              <label>
-                รหัสจัดการ 6 หลัก
-                <input value={manageCode} onChange={(event) => setManageCode(event.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={6} placeholder="••••••" />
+                รหัสการจอง 6 หลัก
+                <input ref={manageCodeInputRef} value={bookingCode} onChange={(event) => setBookingCode(event.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={6} autoComplete="off" placeholder="เช่น 389418" />
               </label>
               {manageError && <p className="formError">! {manageError}</p>}
-              <button className="primary" disabled={busy}>{busy ? "กำลังตรวจสอบ…" : "ตรวจสอบการจอง"}</button>
+              <button className="primary" disabled={busy || bookingCode.length !== 6}>{busy ? "กำลังตรวจสอบ…" : "ตรวจสอบการจอง"}</button>
             </> : <>
-              <div className="receipt"><span>ภารกิจ</span><strong>{managed.purpose}</strong><span>ช่วงเวลา</span><strong>{displayDate(managed.startAt)} {displayTime(managed.startAt)} – {displayDate(managed.endAt)} {displayTime(managed.endAt)}</strong></div>
+              <div className="receipt"><span>รถที่จอง</span><strong>รถยนต์ส่วนกลาง</strong><span>ผู้จอง</span><strong>{managed.name}</strong><span>ภารกิจ</span><strong>{managed.purpose || "ไม่ระบุ"}</strong><span>สถานที่</span><strong>{managed.destination || "ไม่ระบุ"}</strong><span>ช่วงเวลา</span><strong>{displayDate(managed.startAt)} {displayTime(managed.startAt)} – {displayDate(managed.endAt)} {displayTime(managed.endAt)}</strong><span>สถานะ</span><strong>{managed.status === "cancelled" ? "ยกเลิกแล้ว" : "ยืนยันการจอง"}</strong></div>
               {manageError && <p className="formError">! {manageError}</p>}
               <button type="button" className="primary" onClick={beginEdit} disabled={managed.status === "cancelled"}>แก้ไขการจอง</button>
               <button type="button" className="cancel" onClick={() => setCancelConfirm(true)} disabled={managed.status === "cancelled"}>ยกเลิกการจอง</button>
             </>}
-            <button type="button" className="cancel" onClick={() => { setManageOpen(false); setManaged(null); setManageError(""); }}>
+            <button type="button" className="cancel manageBackButton" onClick={() => { setManaged(null); setManageError(""); setBookingCode(""); closeManageBooking(); }}>
               กลับหน้าหลัก
             </button>
           </form>
@@ -564,8 +694,10 @@ export function BookingApp() {
             <h2>ยืนยันยกเลิกการจอง?</h2>
             <p>ช่วงเวลานี้จะกลับมาเปิดให้ผู้อื่นจองได้</p>
             {manageError && <p className="formError">! {manageError}</p>}
-            <button className="primary" onClick={cancelManagedBooking} disabled={busy}>{busy ? "กำลังยกเลิก…" : "ยืนยันยกเลิก"}</button>
-            <button className="cancel" onClick={() => setCancelConfirm(false)} disabled={busy}>กลับ</button>
+            <div className="cancelDialogActions">
+              <button className="primary" onClick={cancelManagedBooking} disabled={busy}>{busy ? "กำลังยกเลิก…" : "ยืนยันยกเลิก"}</button>
+              <button className="cancel" onClick={() => setCancelConfirm(false)} disabled={busy}>กลับ</button>
+            </div>
           </section>
         </div>
       )}

@@ -16,7 +16,6 @@ create table if not exists public.vehicle_bookings (
   booking_reference text not null unique,
   management_code_hash text not null,
   booker_name text not null,
-  phone text,
   purpose text not null,
   note text,
   start_time timestamptz not null,

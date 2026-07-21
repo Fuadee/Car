@@ -6,7 +6,6 @@ export type BookingRow = {
   booking_reference: string;
   management_code_hash: string;
   booker_name: string;
-  phone: string | null;
   purpose: string;
   destination: string;
   note: string | null;
@@ -25,13 +24,13 @@ export type PublicBooking = {
   name: string;
   purpose: string;
   location: string;
+  note?: string | null;
   status: BookingStatus;
   updatedAt: string;
 };
 
 export type BookingInput = {
   name: string;
-  phone?: string;
   purpose: string;
   destination: string;
   note?: string;
@@ -39,7 +38,7 @@ export type BookingInput = {
   endAt: string;
 };
 
-export type ManageCredentials = { reference: string; managementCode: string };
+export type ManageCredentials = { bookingCode: string };
 export type UpdateBookingInput = BookingInput &
   ManageCredentials & { updatedAt: string };
 export type MutationResult<T> =
