@@ -104,7 +104,7 @@ export function CalendarMonth({
   const [month, setMonth] = useState(
     new Date(initialMonth.getFullYear(), initialMonth.getMonth(), 1),
   );
-  const [selected, setSelected] = useState(keyOf(today));
+  const [selected, setSelected] = useState(keyOf(initialMonth));
   const [dayPanel, setDayPanel] = useState(false);
   const days = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1);

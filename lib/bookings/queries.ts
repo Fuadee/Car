@@ -94,3 +94,22 @@ export async function getActiveVehicle() {
     )[0] ?? null
   );
 }
+
+export async function getVehicleById(id: string) {
+  const params = new URLSearchParams({
+    select: "id,name,license_plate",
+    id: `eq.${id}`,
+    limit: "1",
+  });
+  const response = await supabaseAdminRequest(`vehicles?${params}`);
+  if (!response.ok) throw new Error("VEHICLE_READ_FAILED");
+  return (
+    (
+      (await response.json()) as {
+        id: string;
+        name: string;
+        license_plate: string;
+      }[]
+    )[0] ?? null
+  );
+}

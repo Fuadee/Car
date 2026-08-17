@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs && npm run test:ui",
-    "test:ui": "vitest --config vitest.config.ts run tests/booking-conflict.test.tsx tests/calendar-mobile.test.tsx",
+    "test:ui": "vitest --config vitest.config.ts run tests/booking-conflict.test.tsx tests/calendar-mobile.test.tsx tests/booking-notifications.test.ts tests/line-client.test.ts tests/deep-link.test.tsx",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

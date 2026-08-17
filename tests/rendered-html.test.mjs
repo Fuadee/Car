@@ -23,7 +23,7 @@ test("server-renders the vehicle booking calendar with the local font", async ()
 });
 
 test("keeps booking credentials server-side and protects booking-code access", async () => {
-  const [admin, client, styles, migration, queries, bookingCode, uniqueCodeMigration] = await Promise.all([
+  const [admin, client, styles, migration, queries, bookingCode, uniqueCodeMigration, lineClient, gitignore] = await Promise.all([
     readFile(new URL("../lib/supabase/admin.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/booking-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -31,9 +31,16 @@ test("keeps booking credentials server-side and protects booking-code access", a
     readFile(new URL("../lib/bookings/queries.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/bookings/booking-code.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202607210003_unique_booking_code_hash.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/line/client.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.gitignore", import.meta.url), "utf8"),
   ]);
   assert.match(admin, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(client, /SUPABASE_SERVICE_ROLE_KEY|serviceRoleKey/);
+  assert.doesNotMatch(client, /LINE_CHANNEL_ACCESS_TOKEN|LINE_GROUP_ID/);
+  assert.match(lineClient, /process\.env\.LINE_CHANNEL_ACCESS_TOKEN/);
+  assert.match(lineClient, /process\.env\.LINE_GROUP_ID/);
+  assert.doesNotMatch(lineClient, /Cd237fd8fe0f32bc8ec53ffd66a6a1eec/);
+  assert.match(gitignore, /^\.env\*$/m);
   assert.match(migration, /exclude using gist/i);
   assert.match(migration, /confirmed_booking_no_overlap/);
   assert.match(queries, /purpose: row\.purpose/);

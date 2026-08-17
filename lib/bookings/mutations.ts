@@ -4,6 +4,7 @@ import {
   checkBookingConflict,
   getActiveVehicle,
   getBookingById,
+  getVehicleById,
   toPublicBooking,
 } from "./queries";
 import {
@@ -19,12 +20,33 @@ import type {
   PublicBooking,
   UpdateBookingInput,
 } from "./types";
+import {
+  notifyBookingCancelled,
+  notifyBookingCreated,
+} from "../line/notifications";
 
 const isOverlapError = (detail: string) =>
   detail.includes("confirmed_booking_no_overlap") || detail.includes("23P01");
 const isBookingCodeConflict = (detail: string) =>
   detail.includes("vehicle_bookings_management_code_hash_key") ||
   detail.includes("management_code_hash");
+
+const notificationError = (reason: unknown) =>
+  reason instanceof Error ? reason.message : "unknown error";
+
+async function afterDatabaseCommit(
+  event: "booking-created" | "booking-cancelled",
+  notify: () => Promise<unknown>,
+) {
+  try {
+    await notify();
+  } catch (reason) {
+    // Keep notification delivery outside the database success contract.
+    console.error(`LINE ${event} notification failed`, {
+      message: notificationError(reason),
+    });
+  }
+}
 
 export async function createBooking(
   input: BookingInput,
@@ -69,7 +91,17 @@ export async function createBooking(
     });
     if (response.ok) {
       const row = ((await response.json()) as BookingRow[])[0];
-      return { ok: true, data: { booking: toPublicBooking(row), bookingCode } };
+      if (!row)
+        return {
+          ok: false,
+          status: 502,
+          message: "ไม่สามารถยืนยันผลการบันทึกการจองได้",
+        };
+      const booking = toPublicBooking(row);
+      await afterDatabaseCommit("booking-created", () =>
+        notifyBookingCreated(booking, vehicle),
+      );
+      return { ok: true, data: { booking, bookingCode } };
     }
     const detail = await response.text();
     if (isBookingCodeConflict(detail)) continue;
@@ -177,19 +209,46 @@ export async function cancelBooking(
       status: 403,
       message: "ไม่พบการจองจากรหัสนี้ กรุณาตรวจสอบแล้วลองอีกครั้ง",
     };
-  const response = await supabaseAdminRequest(`vehicle_bookings?id=eq.${id}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      status: "cancelled",
-      cancelled_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }),
-  });
+  if (current.status === "cancelled")
+    return { ok: true, data: toPublicBooking(current) };
+  if (current.status !== "confirmed")
+    return {
+      ok: false,
+      status: 409,
+      message: "การจองนี้ไม่อยู่ในสถานะที่ยกเลิกได้",
+    };
+  const response = await supabaseAdminRequest(
+    `vehicle_bookings?id=eq.${id}&status=eq.confirmed`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        status: "cancelled",
+        cancelled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
   if (!response.ok)
     return { ok: false, status: 502, message: "ยกเลิกการจองไม่สำเร็จ" };
-  return {
-    ok: true,
-    data: toPublicBooking(((await response.json()) as BookingRow[])[0]),
-  };
+  const row = ((await response.json()) as BookingRow[])[0];
+  if (!row) {
+    // A concurrent retry already changed the status. Treat cancellation as
+    // idempotent and do not send a second LINE notification.
+    return {
+      ok: true,
+      data: { ...toPublicBooking(current), status: "cancelled" },
+    };
+  }
+  const booking = toPublicBooking(row);
+  let vehicle = null;
+  try {
+    vehicle = await getVehicleById(row.vehicle_id);
+  } catch {
+    console.warn("LINE cancellation vehicle detail lookup failed");
+  }
+  await afterDatabaseCommit("booking-cancelled", () =>
+    notifyBookingCancelled(booking, vehicle),
+  );
+  return { ok: true, data: booking };
 }

@@ -57,8 +57,13 @@ function ManageBookingIcon() {
 const conflictFallbackMessage =
   "ช่วงเวลาที่เลือกมีผู้จองแล้ว กรุณาเลือกวันหรือเวลาใหม่";
 
-export function BookingApp() {
+export function BookingApp({ initialDate }: { initialDate?: string }) {
   const today = useMemo(() => new Date(), []);
+  const calendarInitialDate = useMemo(() => {
+    if (!initialDate) return today;
+    const [year, month, day] = initialDate.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }, [initialDate, today]);
   const [bookings, setBookings] = useState<VehicleBooking[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(true);
   const [calendarError, setCalendarError] = useState("");
@@ -405,7 +410,7 @@ export function BookingApp() {
 
         <CalendarMonth
           bookings={bookings}
-          initialMonth={today}
+          initialMonth={calendarInitialDate}
           today={today}
           loading={calendarLoading}
           error={calendarError}
