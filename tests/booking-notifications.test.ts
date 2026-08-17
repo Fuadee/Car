@@ -92,6 +92,7 @@ const jsonResponse = (body: unknown, ok = true) =>
   }) as Response;
 
 beforeEach(() => {
+  vi.spyOn(console, "info").mockImplementation(() => undefined);
   mocks.bookingCodeExists.mockResolvedValue(false);
   mocks.checkBookingConflict.mockResolvedValue(null);
   mocks.getActiveVehicle.mockResolvedValue(vehicle);

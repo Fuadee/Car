@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendLinePushMessage } from "../lib/line/client";
 import {
   bookingCancelledText,
@@ -17,6 +17,10 @@ const booking = {
   updatedAt: "2026-08-17T00:00:00.000Z",
 };
 
+beforeEach(() => {
+  vi.spyOn(console, "info").mockImplementation(() => undefined);
+});
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -27,6 +31,7 @@ describe("LINE push client", () => {
   it("pushes to the configured group without exposing configuration in code", async () => {
     vi.stubEnv("LINE_CHANNEL_ACCESS_TOKEN", "server-token");
     vi.stubEnv("LINE_GROUP_ID", "group-id");
+    vi.stubEnv("APP_URL", "");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -44,6 +49,11 @@ describe("LINE push client", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe(
       "Bearer server-token",
     );
+    expect(console.info).toHaveBeenCalledWith(
+      "[LINE] config token=true group=true appUrl=false",
+    );
+    expect(console.info).toHaveBeenCalledWith("[LINE] push request started");
+    expect(console.info).toHaveBeenCalledWith("[LINE] push success status=200");
   });
 
   it("does not crash or call LINE when the access token is missing", async () => {

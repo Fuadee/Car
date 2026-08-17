@@ -35,11 +35,15 @@ const notificationError = (reason: unknown) =>
   reason instanceof Error ? reason.message : "unknown error";
 
 async function afterDatabaseCommit(
-  event: "booking-created" | "booking-cancelled",
-  notify: () => Promise<unknown>,
+  event: "booking" | "cancellation",
+  notify: () => Promise<boolean>,
 ) {
+  console.info(`[LINE] ${event} notification started`);
   try {
-    await notify();
+    const delivered = await notify();
+    console.info(
+      `[LINE] ${event} notification completed delivered=${delivered}`,
+    );
   } catch (reason) {
     // Keep notification delivery outside the database success contract.
     console.error(`LINE ${event} notification failed`, {
@@ -98,7 +102,8 @@ export async function createBooking(
           message: "ไม่สามารถยืนยันผลการบันทึกการจองได้",
         };
       const booking = toPublicBooking(row);
-      await afterDatabaseCommit("booking-created", () =>
+      console.info("[LINE] booking database insert succeeded");
+      await afterDatabaseCommit("booking", () =>
         notifyBookingCreated(booking, vehicle),
       );
       return { ok: true, data: { booking, bookingCode } };
@@ -241,13 +246,14 @@ export async function cancelBooking(
     };
   }
   const booking = toPublicBooking(row);
+  console.info("[LINE] cancellation database update succeeded");
   let vehicle = null;
   try {
     vehicle = await getVehicleById(row.vehicle_id);
   } catch {
     console.warn("LINE cancellation vehicle detail lookup failed");
   }
-  await afterDatabaseCommit("booking-cancelled", () =>
+  await afterDatabaseCommit("cancellation", () =>
     notifyBookingCancelled(booking, vehicle),
   );
   return { ok: true, data: booking };

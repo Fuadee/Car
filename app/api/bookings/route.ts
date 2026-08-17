@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  console.info("[LINE] booking API route entered diagnostic=v1");
   try {
     const validated = validateBookingInput(await request.json());
     if (!validated.ok) return failure(validated.message, 400);
@@ -31,13 +32,15 @@ export async function POST(request: NextRequest) {
       validated.start,
       validated.end,
     );
-    return result.ok
-      ? NextResponse.json({ ok: true, ...result.data }, { status: 201 })
-      : failure(
-          result.message,
-          result.status,
-          result.conflict ? { conflict: result.conflict } : undefined,
-        );
+    if (result.ok) {
+      console.info("[LINE] booking API response status=201");
+      return NextResponse.json({ ok: true, ...result.data }, { status: 201 });
+    }
+    return failure(
+      result.message,
+      result.status,
+      result.conflict ? { conflict: result.conflict } : undefined,
+    );
   } catch {
     return failure("ไม่สามารถบันทึกการจองได้ กรุณาลองใหม่", 500);
   }

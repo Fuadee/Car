@@ -2,8 +2,8 @@ export type LineMessage = Record<string, unknown> & { type: string };
 
 const LINE_PUSH_ENDPOINT = "https://api.line.me/v2/bot/message/push";
 
-const errorMessage = (reason: unknown) =>
-  reason instanceof Error ? reason.message : "unknown error";
+const errorName = (reason: unknown) =>
+  reason instanceof Error ? reason.name : "UnknownError";
 
 /**
  * Sends a best-effort push through the existing LINE Messaging API channel.
@@ -15,6 +15,11 @@ export async function sendLinePushMessage(
 ): Promise<boolean> {
   const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
   const groupId = process.env.LINE_GROUP_ID?.trim();
+  const appUrl = process.env.APP_URL?.trim();
+
+  console.info(
+    `[LINE] config token=${Boolean(accessToken)} group=${Boolean(groupId)} appUrl=${Boolean(appUrl)}`,
+  );
 
   if (!accessToken) {
     console.warn(
@@ -32,6 +37,7 @@ export async function sendLinePushMessage(
   }
 
   try {
+    console.info("[LINE] push request started");
     const response = await fetch(LINE_PUSH_ENDPOINT, {
       method: "POST",
       headers: {
@@ -42,12 +48,15 @@ export async function sendLinePushMessage(
     });
     if (!response.ok) {
       // Avoid logging the response body so upstream details cannot leak.
-      console.error("LINE push failed", { status: response.status });
+      console.error(`[LINE] push failed status=${response.status}`);
       return false;
     }
+    console.info(`[LINE] push success status=${response.status}`);
     return true;
   } catch (reason) {
-    console.error("LINE push failed", { message: errorMessage(reason) });
+    console.error("[LINE] push failed error=network_or_runtime", {
+      error: errorName(reason),
+    });
     return false;
   }
 }
