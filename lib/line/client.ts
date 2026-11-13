@@ -12,14 +12,10 @@ const errorName = (reason: unknown) =>
  */
 export async function sendLinePushMessage(
   messages: readonly LineMessage[],
+  recipientId?: string,
 ): Promise<boolean> {
   const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
-  const groupId = process.env.LINE_GROUP_ID?.trim();
-  const appUrl = process.env.APP_URL?.trim();
-
-  console.info(
-    `[LINE] config token=${Boolean(accessToken)} group=${Boolean(groupId)} appUrl=${Boolean(appUrl)}`,
-  );
+  const recipient = recipientId ?? process.env.LINE_GROUP_ID?.trim();
 
   if (!accessToken) {
     console.warn(
@@ -27,8 +23,8 @@ export async function sendLinePushMessage(
     );
     return false;
   }
-  if (!groupId) {
-    console.warn("LINE push skipped: LINE_GROUP_ID is not configured");
+  if (!recipient) {
+    console.warn("LINE push skipped: recipient is not configured");
     return false;
   }
   if (!messages.length) {
@@ -44,7 +40,7 @@ export async function sendLinePushMessage(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ to: groupId, messages }),
+      body: JSON.stringify({ to: recipient, messages }),
     });
     if (!response.ok) {
       // Avoid logging the response body so upstream details cannot leak.

@@ -31,7 +31,6 @@ describe("LINE push client", () => {
   it("pushes to the configured group without exposing configuration in code", async () => {
     vi.stubEnv("LINE_CHANNEL_ACCESS_TOKEN", "server-token");
     vi.stubEnv("LINE_GROUP_ID", "group-id");
-    vi.stubEnv("APP_URL", "");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -48,9 +47,6 @@ describe("LINE push client", () => {
     });
     expect(new Headers(init.headers).get("Authorization")).toBe(
       "Bearer server-token",
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      "[LINE] config token=true group=true appUrl=false",
     );
     expect(console.info).toHaveBeenCalledWith("[LINE] push request started");
     expect(console.info).toHaveBeenCalledWith("[LINE] push success status=200");

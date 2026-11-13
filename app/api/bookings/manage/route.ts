@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         id: row.id,
         startAt: row.start_time,
         endAt: row.end_time,
+        actualReturnAt: row.actual_return_at ?? null,
         name: row.booker_name,
         purpose: row.purpose,
         destination: row.destination,

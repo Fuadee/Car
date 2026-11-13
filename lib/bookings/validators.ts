@@ -5,6 +5,7 @@ const clean = (value: unknown, max: number) =>
 
 export function validateBookingInput(
   value: unknown,
+  options: { allowPastStart?: boolean } = {},
 ):
   | { ok: true; data: BookingInput; start: Date; end: Date }
   | { ok: false; message: string } {
@@ -35,7 +36,7 @@ export function validateBookingInput(
     end <= start
   )
     return { ok: false, message: "วันและเวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม" };
-  if (start.getTime() < Date.now() - 60_000)
+  if (!options.allowPastStart && start.getTime() < Date.now() - 60_000)
     return { ok: false, message: "ไม่สามารถจองวันเวลาที่ผ่านมาแล้ว" };
   const maxHours = Number(process.env.MAX_BOOKING_HOURS ?? 168);
   if ((end.getTime() - start.getTime()) / 3_600_000 > maxHours)

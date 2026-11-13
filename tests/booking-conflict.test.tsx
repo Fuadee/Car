@@ -33,26 +33,10 @@ afterEach(() => {
 });
 
 describe("booking conflict banner", () => {
-  it("opens the same manage-booking sheet from both entry points and restores focus", async () => {
+  it("links users to the vehicle usage workflow instead of exposing legacy management controls", () => {
     render(<BookingApp />);
-
-    const triggers = screen.getAllByRole("button", {
-      name: "ตรวจสอบ แก้ไข หรือยกเลิกการจอง",
-    });
-    expect(triggers).toHaveLength(2);
-    expect(triggers[0].getAttribute("aria-controls")).toBe("manage-booking-sheet");
-    expect(triggers[1].getAttribute("aria-controls")).toBe("manage-booking-sheet");
-
-    fireEvent.click(triggers[0]);
-    expect(screen.getByRole("dialog", { name: "จัดการการจอง" })).toBeTruthy();
-    await waitFor(() =>
-      expect(document.activeElement).toBe(screen.getByLabelText("รหัสการจอง 6 หลัก")),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "ปิดหน้าจัดการการจอง" }));
-    await waitFor(() => expect(document.activeElement).toBe(triggers[0]));
-
-    fireEvent.click(triggers[1]);
-    expect(screen.getByRole("dialog", { name: "จัดการการจอง" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "การใช้รถ" }).getAttribute("href")).toBe("/vehicle-usage");
+    expect(screen.queryByRole("button", { name: "ตรวจสอบ แก้ไข หรือยกเลิกการจอง" })).toBeNull();
   });
 
   it("renders from a 409 response even when conflict details are absent", async () => {
@@ -68,7 +52,7 @@ describe("booking conflict banner", () => {
 
     render(<BookingApp />);
     fillBookingForm();
-    fireEvent.click(screen.getByRole("button", { name: "ยืนยันการจอง" }));
+    fireEvent.click(screen.getByRole("button", { name: "ส่งคำขอใช้รถ" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("ไม่สามารถจองช่วงเวลานี้ได้");
@@ -76,7 +60,7 @@ describe("booking conflict banner", () => {
       "ช่วงเวลาที่เลือกมีผู้จองแล้ว กรุณาเลือกวันหรือเวลาใหม่",
     );
     expect(screen.getByRole("button", { name: "เลือกเวลาใหม่" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "จองรถส่วนกลาง" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "ขอใช้รถส่วนกลาง" })).toBeTruthy();
     expect((screen.getByLabelText(/เวลาเริ่ม/) as HTMLInputElement).value).toBe("09:00");
 
     fireEvent.click(screen.getByRole("button", { name: "เลือกเวลาใหม่" }));
@@ -88,7 +72,12 @@ describe("booking conflict banner", () => {
     expect(screen.getByLabelText(/เวลาเริ่ม/).getAttribute("aria-invalid")).toBe(
       "false",
     );
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/vehicle-usage-requests",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
   });
 
   it("uses the fallback conflict message when a 409 body cannot be parsed", async () => {
@@ -103,7 +92,7 @@ describe("booking conflict banner", () => {
 
     render(<BookingApp />);
     fillBookingForm();
-    fireEvent.click(screen.getByRole("button", { name: "ยืนยันการจอง" }));
+    fireEvent.click(screen.getByRole("button", { name: "ส่งคำขอใช้รถ" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain(

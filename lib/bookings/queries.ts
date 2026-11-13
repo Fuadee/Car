@@ -2,11 +2,12 @@ import { supabaseAdminRequest } from "../supabase/admin";
 import type { BookingRow, PublicBooking } from "./types";
 
 const publicColumns =
-  "id,vehicle_id,booker_name,purpose,destination,note,start_time,end_time,status,updated_at";
+  "id,vehicle_id,booker_name,purpose,destination,note,start_time,end_time,actual_return_at,status,updated_at";
 export const toPublicBooking = (row: BookingRow): PublicBooking => ({
   id: row.id,
   startAt: row.start_time,
   endAt: row.end_time,
+  actualReturnAt: row.actual_return_at ?? null,
   name: row.booker_name,
   purpose: row.purpose,
   location: row.destination,
@@ -54,6 +55,17 @@ export async function getBookingByCodeHash(codeHash: string) {
   return ((await response.json()) as BookingRow[])[0] ?? null;
 }
 
+export async function getBookingBySourceUsageRequestId(requestId: string) {
+  const params = new URLSearchParams({
+    select: "*",
+    source_usage_request_id: `eq.${requestId}`,
+    limit: "1",
+  });
+  const response = await supabaseAdminRequest(`vehicle_bookings?${params}`);
+  if (!response.ok) throw new Error("BOOKING_READ_FAILED");
+  return ((await response.json()) as BookingRow[])[0] ?? null;
+}
+
 export async function bookingCodeExists(codeHash: string) {
   return Boolean(await getBookingByCodeHash(codeHash));
 }
@@ -69,7 +81,7 @@ export async function checkBookingConflict(
     vehicle_id: `eq.${vehicleId}`,
     status: "eq.confirmed",
     start_time: `lt.${end.toISOString()}`,
-    end_time: `gt.${start.toISOString()}`,
+    effective_end_time: `gt.${start.toISOString()}`,
     limit: "1",
   });
   if (excludeBookingId) params.set("id", `neq.${excludeBookingId}`);

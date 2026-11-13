@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { effectiveEnd } from "@/lib/bookings/availability";
 
 export type VehicleBooking = {
   id: string;
   startAt: string;
   endAt: string;
+  actualReturnAt?: string | null;
   name: string;
   purpose: string;
   location: string;
@@ -78,7 +80,7 @@ const coversWholeDay = (entries: VehicleBooking[], day: string) => {
   const intervals = entries
     .map((entry) => ({
       start: Math.max(bounds.start, new Date(entry.startAt).getTime()),
-      end: Math.min(bounds.end, new Date(entry.endAt).getTime()),
+      end: Math.min(bounds.end, new Date(effectiveEnd(entry)).getTime()),
     }))
     .sort((a, b) => a.start - b.start);
   if (!intervals.length || intervals[0].start > bounds.start) return false;
@@ -225,11 +227,12 @@ export function CalendarMonth({
             (entry) =>
               entry.status === "confirmed" &&
               new Date(entry.startAt) <= today &&
-              new Date(entry.endAt) > today,
+              new Date(effectiveEnd(entry)) > today,
           );
-          const status = !entries.length
+          const occupied = entries.filter(entry => new Date(effectiveEnd(entry)).getTime() > Math.max(dayBounds(key).start, new Date(entry.startAt).getTime()));
+          const status = !occupied.length
             ? "available"
-            : coversWholeDay(entries, key)
+            : coversWholeDay(occupied, key)
               ? "full"
               : "partial";
           const dayStatus = hasActive ? "inUse" : status;
@@ -261,7 +264,7 @@ export function CalendarMonth({
                   return (
                     <span
                       key={entry.id}
-                      title={`${entry.name} · ${entry.purpose} · ${timePart(entry.startAt)}–${timePart(entry.endAt)}`}
+                      title={`${entry.name} · ${entry.purpose} · ${timePart(entry.startAt)}–${timePart(entry.endAt)}${entry.actualReturnAt ? ` · คืนก่อนกำหนด ${timePart(entry.actualReturnAt)}` : ""}`}
                       className={`calendarEvent ${entry.status} ${start ? "eventStart" : "eventMiddle"} ${end ? "eventEnd" : ""}`}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -273,6 +276,7 @@ export function CalendarMonth({
                         : end
                           ? `คืนรถ ${timePart(entry.endAt)}`
                           : entry.purpose}
+                      {entry.actualReturnAt && <small className="returnedNote">คืนก่อนกำหนด {timePart(entry.actualReturnAt)}</small>}
                     </span>
                   );
                 })}
@@ -299,7 +303,7 @@ export function CalendarMonth({
                 : "ต่อเนื่อง"}
             </span>
             <strong>{booking.purpose}</strong>
-            <small>{booking.name}</small>
+            <small>{booking.name}{booking.actualReturnAt && ` · คืนก่อนกำหนด ${timePart(booking.actualReturnAt)}`}</small>
           </button>
         ))}
         {!selectedBookings.length && <p>วันนี้ว่างทั้งวัน</p>}
@@ -334,7 +338,7 @@ export function CalendarMonth({
                   </span>
                   <div>
                     <strong>{booking.name}</strong>
-                    <small>{booking.purpose}</small>
+                    <small>{booking.purpose}</small>{booking.actualReturnAt && <small className="returnedNote">คืนก่อนกำหนด {datePart(booking.actualReturnAt)} {timePart(booking.actualReturnAt)}</small>}
                   </div>
                 </button>
               ))}

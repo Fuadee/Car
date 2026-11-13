@@ -4,6 +4,7 @@ import {
   checkBookingConflict,
   getActiveVehicle,
   getBookingById,
+  getBookingBySourceUsageRequestId,
   getVehicleById,
   toPublicBooking,
 } from "./queries";
@@ -30,6 +31,9 @@ const isOverlapError = (detail: string) =>
 const isBookingCodeConflict = (detail: string) =>
   detail.includes("vehicle_bookings_management_code_hash_key") ||
   detail.includes("management_code_hash");
+const isUsageRequestBookingConflict = (detail: string) =>
+  detail.includes("vehicle_bookings_source_usage_request_id_key") ||
+  detail.includes("source_usage_request_id");
 
 const notificationError = (reason: unknown) =>
   reason instanceof Error ? reason.message : "unknown error";
@@ -56,10 +60,11 @@ export async function createBooking(
   input: BookingInput,
   start: Date,
   end: Date,
+  options?: { sourceUsageRequestId?: string },
 ): Promise<
   MutationResult<{
     booking: PublicBooking;
-    bookingCode: string;
+    bookingCode: string | null;
   }>
 > {
   const vehicle = await getActiveVehicle();
@@ -91,6 +96,9 @@ export async function createBooking(
         start_time: start.toISOString(),
         end_time: end.toISOString(),
         status: "confirmed",
+        ...(options?.sourceUsageRequestId
+          ? { source_usage_request_id: options.sourceUsageRequestId }
+          : {}),
       }),
     });
     if (response.ok) {
@@ -110,6 +118,16 @@ export async function createBooking(
     }
     const detail = await response.text();
     if (isBookingCodeConflict(detail)) continue;
+    if (options?.sourceUsageRequestId && isUsageRequestBookingConflict(detail)) {
+      const existing = await getBookingBySourceUsageRequestId(
+        options.sourceUsageRequestId,
+      );
+      if (existing)
+        return {
+          ok: true,
+          data: { booking: toPublicBooking(existing), bookingCode: null },
+        };
+    }
     return {
       ok: false,
       status: 409,
@@ -147,6 +165,8 @@ export async function updateBooking(
       status: 403,
       message: "ไม่พบการจองจากรหัสนี้ กรุณาตรวจสอบแล้วลองอีกครั้ง",
     };
+  if (current.actual_return_at)
+    return { ok: false, status: 409, message: "รายการที่คืนรถแล้วไม่สามารถแก้ไขได้" };
   if (current.updated_at !== input.updatedAt)
     return {
       ok: false,
@@ -214,8 +234,20 @@ export async function cancelBooking(
       status: 403,
       message: "ไม่พบการจองจากรหัสนี้ กรุณาตรวจสอบแล้วลองอีกครั้ง",
     };
+  return cancelBookingById(id, current);
+}
+
+export async function cancelBookingById(
+  id: string,
+  knownBooking?: BookingRow,
+): Promise<MutationResult<PublicBooking>> {
+  const current = knownBooking ?? await getBookingById(id);
+  if (!current)
+    return { ok: false, status: 404, message: "ไม่พบรายการจองรถ" };
   if (current.status === "cancelled")
     return { ok: true, data: toPublicBooking(current) };
+  if (current.actual_return_at)
+    return { ok: false, status: 409, message: "รายการที่ใช้รถและคืนแล้วไม่สามารถยกเลิกได้" };
   if (current.status !== "confirmed")
     return {
       ok: false,

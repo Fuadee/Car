@@ -11,16 +11,19 @@ export type BookingRow = {
   note: string | null;
   start_time: string;
   end_time: string;
+  actual_return_at?: string | null;
   status: BookingStatus;
   created_at: string;
   updated_at: string;
   cancelled_at: string | null;
+  source_usage_request_id?: string | null;
 };
 
 export type PublicBooking = {
   id: string;
   startAt: string;
   endAt: string;
+  actualReturnAt?: string | null;
   name: string;
   purpose: string;
   location: string;

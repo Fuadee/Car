@@ -2,15 +2,18 @@
 
 import {
   FormEvent,
-  MouseEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { Car } from "lucide-react";
+import { Car, ClipboardList } from "lucide-react";
+import Link from "next/link";
+import { EarlyReturnAction } from "./early-return-action";
+import { effectiveEnd, isActiveBooking } from "@/lib/bookings/availability";
 import { CalendarMonth, type VehicleBooking } from "./calendar-month";
+import type { VehicleUsageRequest } from "@/lib/vehicle-usage-requests/types";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 const dateKey = (date: Date) =>
@@ -45,25 +48,22 @@ type BookingConflict = {
   endAt: string | null;
 };
 
-function ManageBookingIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
-      <path d="M8 3v3m8-3v3M4.5 9h15M6 5.5h12a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 18 19.5H6A1.5 1.5 0 0 1 4.5 18V7A1.5 1.5 0 0 1 6 5.5Z" />
-      <path d="m10.5 15 1.5 1.5 3-3" />
-    </svg>
-  );
-}
-
 const conflictFallbackMessage =
   "ช่วงเวลาที่เลือกมีผู้จองแล้ว กรุณาเลือกวันหรือเวลาใหม่";
 
 export function BookingApp({ initialDate }: { initialDate?: string }) {
-  const today = useMemo(() => new Date(), []);
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => { const timer = window.setInterval(() => setToday(new Date()), 15_000); return () => window.clearInterval(timer); }, []);
   const calendarInitialDate = useMemo(() => {
     if (!initialDate) return today;
     const [year, month, day] = initialDate.split("-").map(Number);
     return new Date(year, month - 1, day);
   }, [initialDate, today]);
+  const [homeBookings, setHomeBookings] = useState<VehicleBooking[] | null>(null);
+  const loadHomeBookings = useCallback(async () => {
+    try { const response = await fetch("/api/bookings/current", { cache: "no-store" }); const data = await response.json() as { bookings?: VehicleBooking[] }; if (response.ok && data.bookings) setHomeBookings(data.bookings); } catch { /* Keep the last known status until the next refresh. */ }
+  }, []);
+  useEffect(() => { const start = window.setTimeout(() => void loadHomeBookings(), 0); const timer = window.setInterval(() => void loadHomeBookings(), 30_000); return () => { window.clearTimeout(start); window.clearInterval(timer); }; }, [loadHomeBookings]);
   const [bookings, setBookings] = useState<VehicleBooking[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(true);
   const [calendarError, setCalendarError] = useState("");
@@ -76,11 +76,9 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
   const [managed, setManaged] = useState<ManagedBooking | null>(null);
   const [editContext, setEditContext] = useState<{ id: string; bookingCode: string; updatedAt: string } | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
-  const [success, setSuccess] = useState<{
-    code: string;
-    booking: VehicleBooking;
-  } | null>(null);
-  const [copyStatus, setCopyStatus] = useState("");
+  const [requestSuccess, setRequestSuccess] =
+    useState<VehicleUsageRequest | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [detail, setDetail] = useState<VehicleBooking | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -101,20 +99,18 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
 
   const activeBooking = useMemo(
     () =>
-      bookings.find(
+      (homeBookings ?? bookings).find(
         (booking) =>
-          new Date(booking.startAt) <= today &&
-          new Date(booking.endAt) > today &&
-          booking.status === "confirmed",
+          isActiveBooking(booking, today),
       ),
-    [bookings, today],
+    [bookings, homeBookings, today],
   );
   const nextBooking = useMemo(
-    () => bookings.filter((booking) => booking.status === "confirmed" && new Date(booking.startAt) > today).sort((a, b) => a.startAt.localeCompare(b.startAt))[0],
-    [bookings, today],
+    () => (homeBookings ?? bookings).filter((booking) => booking.status === "confirmed" && new Date(booking.startAt) > today).sort((a, b) => a.startAt.localeCompare(b.startAt))[0],
+    [bookings, homeBookings, today],
   );
   const remainingLabel = activeBooking ? (() => {
-    const hours = Math.max(0, Math.ceil((new Date(activeBooking.endAt).getTime() - today.getTime()) / 3_600_000));
+    const hours = Math.max(0, Math.ceil((new Date(effectiveEnd(activeBooking)).getTime() - today.getTime()) / 3_600_000));
     const days = Math.floor(hours / 24); const rest = hours % 24;
     return `${days ? `${days} วัน ` : ""}${rest} ชั่วโมง`;
   })() : "รถพร้อมใช้งาน";
@@ -149,23 +145,31 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
     const { start, end } = currentRange.current;
     if (start && end) void loadBookings(start, end);
   }, [loadBookings]);
+  const loadPendingCount = useCallback(async () => {
+    try {
+      const response = await fetch("/api/vehicle-usage-requests?summary=count", {
+        cache: "no-store",
+      });
+      const result = (await response.json()) as { pendingCount?: number };
+      if (response.ok) setPendingCount(result.pendingCount ?? 0);
+    } catch {
+      // The booking surface remains usable if the optional navigation badge fails.
+    }
+  }, []);
   useEffect(() => {
     const timer = window.setInterval(refresh, 30_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadPendingCount(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPendingCount]);
   useEffect(() => {
     if (!manageOpen || managed) return;
 
     const frame = window.requestAnimationFrame(() => manageCodeInputRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [manageOpen, managed]);
-  function openManageBooking(event: MouseEvent<HTMLButtonElement>) {
-    manageTriggerRef.current = event.currentTarget;
-    setManaged(null);
-    setManageError("");
-    setBookingCode("");
-    setManageOpen(true);
-  }
   function closeManageBooking() {
     setManageOpen(false);
     window.requestAnimationFrame(() => manageTriggerRef.current?.focus());
@@ -243,7 +247,7 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
       return setError("วันและเวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม");
     setBusy(true);
     try {
-      const response = await fetch(editContext ? `/api/bookings/${editContext.id}` : "/api/bookings", {
+      const response = await fetch(editContext ? `/api/bookings/${editContext.id}` : "/api/vehicle-usage-requests", {
         method: editContext ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -259,7 +263,7 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
       let result: {
         message?: string;
         conflict?: VehicleBooking;
-        bookingCode?: string;
+        request?: VehicleUsageRequest;
         booking?: VehicleBooking;
       };
       try {
@@ -271,19 +275,19 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
         setTimeConflict({
           message: result.message ?? conflictFallbackMessage,
           startAt: result.conflict?.startAt ?? null,
-          endAt: result.conflict?.endAt ?? null,
+          endAt: result.conflict ? effectiveEnd(result.conflict) : null,
         });
         return;
       }
       if (!response.ok)
         return setError(result.message ?? "ไม่สามารถบันทึกการจองได้");
       if (editContext) { setOpen(false); setEditContext(null); refresh(); return; }
-      if (!result.bookingCode || !result.booking)
+      if (!result.request)
         throw new Error("INVALID_RESPONSE");
       setOpen(false);
-      setCopyStatus("");
-      setSuccess({ code: result.bookingCode, booking: result.booking });
+      setRequestSuccess(result.request);
       refresh();
+      void loadPendingCount();
     } catch {
       setError("ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่");
     } finally {
@@ -291,37 +295,26 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
     }
   }
 
-  async function copyBookingCode() {
-    if (!success) return;
-    try {
-      await navigator.clipboard.writeText(success.code);
-      setCopyStatus("คัดลอกแล้ว");
-    } catch {
-      setCopyStatus("ไม่สามารถคัดลอกรหัสได้");
-    }
-  }
-
   return (
     <main>
       <header className="topbar">
-        <div className="brandMark" aria-hidden="true">
-          <Car size={22} />
-        </div>
-        <div className="brand">
-          <strong>ระบบจองรถส่วนกลาง</strong>
-          <span>ดูปฏิทินและจองรถล่วงหน้า</span>
-        </div>
-        <button
-          className="manageLink"
-          onClick={openManageBooking}
-          aria-label="ตรวจสอบ แก้ไข หรือยกเลิกการจอง"
-          aria-expanded={manageOpen}
-          aria-controls="manage-booking-sheet"
+        <Link className="homeBrand" href="/" aria-label="กลับหน้าหลัก">
+          <div className="brandMark" aria-hidden="true">
+            <Car size={22} />
+          </div>
+          <div className="brand">
+            <strong>ระบบจองรถส่วนกลาง</strong>
+            <span>ดูปฏิทินและจองรถล่วงหน้า</span>
+          </div>
+        </Link>
+        <Link
+          className={`usageLink ${pendingCount > 0 ? "hasPending" : ""}`}
+          href="/vehicle-usage"
         >
-          <ManageBookingIcon />
-          <span className="manageLabelFull">จัดการการจอง</span>
-          <span className="manageLabelShort">จัดการ</span>
-        </button>
+          <ClipboardList aria-hidden="true" />
+          <span>การใช้รถ</span>
+          {pendingCount > 0 && <small><b>{pendingCount}</b><em> รออนุมัติ</em></small>}
+        </Link>
       </header>
       <div className="page">
         <section className="intro">
@@ -329,9 +322,6 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
             <p className="eyebrow">ภาพรวมวันนี้</p>
             <h1>{todayLabel}</h1>
           </div>
-          <button className="outline" onClick={openManageBooking}>
-            ⌁ จัดการการจองของฉัน
-          </button>
         </section>
         <section
           className={`vehicleCard compactVehicle ${activeBooking ? "isInUse" : "isAvailable"}`}
@@ -392,18 +382,9 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
             </div>
           </div>
           <div className="vehicleActions">
+            {activeBooking && <EarlyReturnAction key={activeBooking.id} booking={activeBooking} now={today} onChange={() => { refresh(); void loadHomeBookings(); }} />}
             <button className="primary bookMain" onClick={() => startBooking()}>
               ＋ จองรถ
-            </button>
-            <button
-              className="manageBookingLink"
-              onClick={openManageBooking}
-              aria-label="ตรวจสอบ แก้ไข หรือยกเลิกการจอง"
-              aria-expanded={manageOpen}
-              aria-controls="manage-booking-sheet"
-            >
-              <ManageBookingIcon />
-              <span>ตรวจสอบ / แก้ไข / ยกเลิกการจอง</span>
             </button>
           </div>
         </section>
@@ -439,7 +420,7 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
             <div className="sheetHead">
               <div>
                 <span>รองรับการจองวันเดียวและหลายวัน</span>
-                <h2>{editContext ? "แก้ไขการจอง" : "จองรถส่วนกลาง"}</h2>
+                <h2>{editContext ? "แก้ไขการจอง" : "ขอใช้รถส่วนกลาง"}</h2>
               </div>
               <button
                 type="button"
@@ -574,7 +555,7 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
               </button>
               <button className="primary" disabled={busy} aria-busy={busy}>
                 {busy && <span className="buttonSpinner" aria-hidden="true" />}
-                {busy ? "กำลังตรวจสอบ..." : editContext ? "บันทึกการแก้ไข" : "ยืนยันการจอง"}
+                {busy ? "กำลังตรวจสอบ..." : editContext ? "บันทึกการแก้ไข" : "ส่งคำขอใช้รถ"}
               </button>
             </div>
           </form>
@@ -610,6 +591,7 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
                 <dt>คืนรถ</dt>
                 <dd>
                   {displayDate(detail.endAt)} · {displayTime(detail.endAt)} น.
+                  {detail.actualReturnAt && <small className="returnedNote">คืนก่อนกำหนด {displayDate(detail.actualReturnAt)} {displayTime(detail.actualReturnAt)} น.</small>}
                 </dd>
               </div>
               <div>
@@ -633,27 +615,23 @@ export function BookingApp({ initialDate }: { initialDate?: string }) {
           </section>
         </div>
       )}
-      {success && (
+      {requestSuccess && (
         <div className="overlay">
           <section className="dialog success">
             <div className="successIcon">✓</div>
-            <h2>จองรถสำเร็จ</h2>
-            <p>ปฏิทินได้รับการอัปเดตแล้ว</p>
+            <h2>ส่งคำขอใช้รถแล้ว</h2>
+            <p>สถานะ: <strong>รออนุมัติ</strong></p>
             <div className="receipt">
-              <span>รหัสการจอง</span>
-              <strong className="code">{success.code}</strong>
-              <span>รถที่จอง</span>
+              <span>รถที่ขอใช้</span>
               <strong>รถยนต์ส่วนกลาง</strong>
               <span>ผู้จอง</span>
-              <strong>{success.booking.name}</strong>
+              <strong>{requestSuccess.name}</strong>
               <span>ช่วงเวลา</span>
-              <strong>{displayDate(success.booking.startAt)} {displayTime(success.booking.startAt)} – {displayDate(success.booking.endAt)} {displayTime(success.booking.endAt)}</strong>
+              <strong>{displayDate(requestSuccess.startAt)} {displayTime(requestSuccess.startAt)} – {displayDate(requestSuccess.endAt)} {displayTime(requestSuccess.endAt)}</strong>
             </div>
-            <p className="warning">ใช้รหัสนี้สำหรับตรวจสอบ แก้ไข หรือยกเลิกการจอง</p>
+            <p className="warning">รายการนี้จะปรากฏในปฏิทินเมื่อได้รับการอนุมัติแล้ว</p>
             <div className="successActions">
-              <button className="cancel" onClick={copyBookingCode}>คัดลอกรหัส</button>
-              {copyStatus && <p className="warning">{copyStatus}</p>}
-              <button className="primary" onClick={() => { setSuccess(null); setCopyStatus(""); }}>
+              <button className="primary" onClick={() => setRequestSuccess(null)}>
                 กลับหน้าปฏิทิน
               </button>
             </div>

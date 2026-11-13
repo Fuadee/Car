@@ -62,6 +62,17 @@ button {
   width: 22px;
   height: 22px;
 }
+.homeBrand {
+  align-items: center;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 12px;
+  min-width: 0;
+  text-decoration: none;
+}
+.homeBrand:hover .brandMark { background: #e4efff; }
+.homeBrand:focus-visible { outline: 3px solid #dce8ff; outline-offset: 3px; border-radius: 12px; }
 .brand {
   display: flex;
   flex-direction: column;
@@ -74,7 +85,6 @@ button {
   color: var(--muted);
 }
 .manageLink {
-  margin-left: auto;
   border: 0;
   background: transparent;
   color: #33425a;
@@ -85,6 +95,62 @@ button {
   gap: 7px;
   white-space: nowrap;
 }
+.usageLink {
+  margin-left: auto;
+  background: #f8fbff;
+  border: 1px solid #c9d8ed;
+  border-radius: 9px;
+  color: #234a7a;
+  text-decoration: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 11px;
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.usageLink svg { flex: none; height: 18px; width: 18px; }
+.usageLink:hover { background: #eef5ff; border-color: #9fb9df; color: #173f70; }
+.usageLink:active { background: #e6f0fd; }
+.usageLink:focus-visible { outline: 3px solid #dce8ff; outline-offset: 2px; }
+.usageLink.usageLinkActive { background: #eaf3ff; border-color: #7fa8da; color: #173f70; font-weight: 800; }
+.usageLink.hasPending { background: #fffaf0; border-color: #ead19b; }
+.usageLink.hasPending:hover { background: #fff5df; border-color: #dbb96e; }
+.usageLink small,
+.pendingCount,
+.pendingBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff3d6;
+  color: #9a6412;
+  border: 1px solid #f2d69f;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.approvedBadge,
+.rejectedBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  flex: none;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.approvedBadge { background: #e4f5eb; border: 1px solid #b9dfc7; color: #257242; }
+.rejectedBadge { background: #fce8e8; border: 1px solid #efc5c5; color: #a44040; }
+.cancelledBadge { display: inline-flex; align-items: center; justify-content: center; background: #f1f3f5; border: 1px solid #d8dde3; border-radius: 999px; color: #5d6775; flex: none; font-size: 12px; font-weight: 700; padding: 4px 8px; white-space: nowrap; }
+.usageLink small { min-width: 20px; min-height: 20px; padding: 0 7px; gap: 1px; }
+.usageLink small b { font: inherit; }
+.usageLink small em { font-style: normal; font-weight: 600; }
+.manageLink { margin-left: 12px; }
 .manageLink svg,
 .manageBookingLink svg {
   width: 19px;
@@ -774,6 +840,10 @@ input.timeConflictField:focus {
   .manageLabelShort {
     display: inline;
   }
+  .usageLink { margin-left: auto; font-size: 13px; gap: 5px; padding: 0 9px; }
+  .usageLink small { min-width: 18px; min-height: 18px; padding: 0 5px; }
+  .usageLink small em { display: none; }
+  .manageLink { margin-left: 8px; }
   .brand strong {
     font-size: 16px;
     overflow: hidden;
@@ -784,6 +854,7 @@ input.timeConflictField:focus {
     min-width: 0;
     flex: 1;
   }
+  .homeBrand { flex: 1; min-width: 0; }
   .page {
     width: min(100% - 24px, 1080px);
   }
@@ -913,6 +984,49 @@ input.timeConflictField:focus {
   .formRow {
     gap: 9px;
   }
+}
+@media (max-width: 360px) {
+  .topbar { gap: 8px; padding: 0 10px; }
+  .brandMark { height: 38px; width: 38px; }
+  .usageLink { gap: 4px; padding: 0 8px; }
+  .usageLink svg { height: 17px; width: 17px; }
+}
+.usagePage { min-height: 100vh; background: #f7f9fc; }
+.usageBack { margin-left: auto; color: #33425a; font-size: 14px; font-weight: 700; text-decoration: none; }
+.usageContent { width: min(960px, calc(100% - 40px)); margin: 0 auto; padding: 40px 0 64px; }
+.usageHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.usageHeading h1 { margin: 3px 0 0; color: #23334d; font-size: 27px; }
+.pendingCount { padding: 6px 10px; white-space: nowrap; }
+.usageList { display: grid; gap: 10px; }
+.usageRequest { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 17px 18px; }
+.usageRequestTop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.usageRequestTop strong { display: block; color: #23334d; font-size: 16px; }
+.usageRequestTop span { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.pendingBadge { flex: none; padding: 4px 8px; white-space: nowrap; }
+.usageRequest dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; }
+.usageRequest dt { color: var(--muted); font-size: 12px; }
+.usageRequest dd { color: #33425a; font-size: 13px; font-weight: 700; margin: 3px 0 0; }
+.usageActions, .approvalActions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 15px; }
+.approveButton, .rejectButton { border-radius: 8px; font: inherit; font-weight: 700; min-height: 38px; padding: 0 13px; }
+.approveButton { background: #1c7a4a; border: 1px solid #1c7a4a; color: #fff; }
+.rejectButton { background: #fff; border: 1px solid #dba9a9; color: #a44040; }
+.cancelRequestButton { background: transparent; border: 0; color: #6b7280; font: inherit; font-size: 13px; font-weight: 700; padding: 0 4px; text-decoration: underline; }
+.approveButton:disabled, .rejectButton:disabled { cursor: not-allowed; opacity: .65; }
+.historyHeading { margin-top: 40px; margin-bottom: 14px; }
+.historyHeading h2 { color: #23334d; font-size: 20px; margin: 3px 0 0; }
+.approvalDialog { width: min(100% - 32px, 380px); }
+.approvalDialog > p:not(.eyebrow) { color: var(--muted); font-size: 14px; }
+.approvalDialog label { display: grid; color: #33425a; font-size: 13px; font-weight: 700; gap: 6px; margin-top: 18px; }
+.approvalDialog input { border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 20px; letter-spacing: .3em; min-height: 46px; padding: 0 12px; }
+.usageState { background: #fff; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); margin: 0; padding: 22px; text-align: center; }
+.usageError { color: #a44040; }
+.usageError button { border: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; }
+@media (max-width: 700px) {
+  .usageContent { width: min(100% - 32px, 960px); padding-top: 26px; }
+  .usageHeading h1 { font-size: 23px; }
+  .usageRequest { padding: 15px; }
+  .usageRequest dl { grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .usageBack { font-size: 13px; }
 }
 @media (max-width: 360px) {
   .status {
@@ -1749,3 +1863,12 @@ button,
     grid-template-columns: 1fr;
   }
 }
+
+.vehicleActions { flex-direction: column; gap: 10px; }
+.earlyReturnButton { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; border: 1px solid #94a3b8; border-radius: 12px; background: #f8fafc; color: #334155; font: inherit; cursor: pointer; }
+.earlyReturnButton:disabled { opacity: .6; cursor: wait; }
+.earlyReturnPending { width: 100%; padding: 12px; border-radius: 12px; background: #fff7ed; color: #9a3412; text-align: center; }
+.earlyReturnPending small,.returnedNote { display: block; color: #9a3412; }
+.usageRequest.returnHighlighted { outline: 3px solid #f59e0b; scroll-margin-top: 24px; }
+
+.vehicleActions .bookMain { width: 100%; }
