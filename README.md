@@ -92,8 +92,6 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm test`: build the starter and verify its rendered loading skeleton
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
-## Learn More
-
 ## Production deployment (Cloudflare Workers)
 
 GitHub repository `Fuadee/Car` is connected to the existing
@@ -113,6 +111,8 @@ pipeline does not apply database migrations.
 
 Check the Worker's **Deployments** page for build logs and deployment status.
 The Vercel integration is separate from this production Cloudflare deployment.
+
+## Learn More
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
