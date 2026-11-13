@@ -94,5 +94,25 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Learn More
 
+## Production deployment (Cloudflare Workers)
+
+GitHub repository `Fuadee/Car` is connected to the existing
+`site-creator-vinext-starter` Worker through Cloudflare Workers Builds.
+Pushing a commit to `main` automatically builds and deploys production.
+
+- Build command: `npm run build`
+- Deploy command: `npx wrangler deploy`
+- Root directory: `/`
+- Preview builds: disabled
+- Production URL: https://site-creator-vinext-starter.fuadee-gallantheart.workers.dev/
+
+Keep runtime variables and secrets in the existing Cloudflare Worker settings.
+`keep_vars` preserves its variables during deployment. Do not commit `.env.local`
+or credentials. Supabase SQL migrations remain a separate manual step; this
+pipeline does not apply database migrations.
+
+Check the Worker's **Deployments** page for build logs and deployment status.
+The Vercel integration is separate from this production Cloudflare deployment.
+
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
